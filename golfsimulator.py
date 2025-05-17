@@ -10,10 +10,13 @@ CLUB_COLORS = ["#FFD700", "#A9A9A9", "#8B0000"]
 FRICTION = 0.98
 SPEED_THRESHOLD = 0.5
 MAX_ATTEMPTS = 3
-HOLE_RADIUS = BALL_RADIUS + 5
-ATTRACTION_RADIUS = 50 
-ATTRACTION_FORCE = 0.1
-
+HOLE_RADIUS = 15
+ATTRACTION_RADIUS = 0
+ATTRACTION_FORCE = 0
+OBSTACLE_COLOR = "#808080"
+HOLE_COLOR = "black"
+BALL_COLOR = "white"
+BACKGROUND_COLOR = "#3cb371"
 
 class Ball:
     def __init__(self, x, y):
@@ -29,14 +32,6 @@ class Ball:
 
     def update(self, obstacles, hole_center):
         if self.moving and self.visible:
-            distance_to_hole = math.hypot(
-                self.x - hole_center[0], self.y - hole_center[1])
-            if distance_to_hole < ATTRACTION_RADIUS:
-                angle_to_hole = math.atan2(
-                    hole_center[1] - self.y, hole_center[0] - self.x)
-                self.vx += ATTRACTION_FORCE * math.cos(angle_to_hole)
-                self.vy += ATTRACTION_FORCE * math.sin(angle_to_hole)
-
             self.x += self.vx
             self.y += self.vy
             self.vx *= FRICTION
@@ -44,8 +39,9 @@ class Ball:
 
             for obstacle in obstacles:
                 ox1, oy1, ox2, oy2 = obstacle
-                if ox1 <= self.x <= ox2 and oy1 <= self.y <= oy2:
-                    self.vx *= -0.8  # Adicionando perda de energia na colisão (80% da velocidade retida)
+                if ox1 <= self.x + self.vx <= ox2 and oy1 <= self.y <= oy2:
+                    self.vx *= -0.8
+                if ox1 <= self.x <= ox2 and oy1 <= self.y + self.vy <= oy2:
                     self.vy *= -0.8
 
             if self.x - BALL_RADIUS < 0 or self.x + BALL_RADIUS > WIDTH:
@@ -55,26 +51,26 @@ class Ball:
                 self.vy *= -0.8
                 self.y = max(BALL_RADIUS, min(HEIGHT - BALL_RADIUS, self.y))
 
-            if abs(self.vx) < SPEED_THRESHOLD and abs(self.vy) < SPEED_THRESHOLD and distance_to_hole > HOLE_RADIUS:
+            distance_to_hole = math.hypot(self.x - hole_center[0], self.y - hole_center[1])
+            if distance_to_hole <= HOLE_RADIUS:
+                self.visible = False
+                return True
+
+            if abs(self.vx) < SPEED_THRESHOLD and abs(self.vy) < SPEED_THRESHOLD and self.moving:
                 self.vx = 0
                 self.vy = 0
                 self.moving = False
-            elif distance_to_hole <= HOLE_RADIUS:
-                self.visible = False
-                return True
+            elif abs(self.vx) > SPEED_THRESHOLD or abs(self.vy) > SPEED_THRESHOLD:
+                self.moving = True
+
         return False
 
     def hit(self, angle_deg, power, club_weight):
         angle_rad = math.radians(angle_deg)
-        # Introduzindo uma pequena não-linearidade na relação potência-velocidade
-        velocity_multiplier = power / 100.0
-        if velocity_multiplier < 0.2:
-            velocity_multiplier *= 0.5
-        elif velocity_multiplier < 0.5:
-            velocity_multiplier *= 0.8
-
-        self.vx = 100 * velocity_multiplier * math.cos(angle_rad) / club_weight # Multiplicador base para a velocidade
-        self.vy = -100 * velocity_multiplier * math.sin(angle_rad) / club_weight
+        # Redução significativa no fator de impulso
+        impulse = power * 2  # Ajuste para uma força mais controlada
+        self.vx = impulse * math.cos(angle_rad) / club_weight
+        self.vy = -impulse * math.sin(angle_rad) / club_weight
         self.moving = True
 
 
@@ -100,44 +96,46 @@ class Level:
 
     def draw(self):
         self.canvas.delete("all")
+        self.canvas.config(bg=BACKGROUND_COLOR)
         for obs in self.obstacles:
-            self.canvas.create_rectangle(obs, fill="gray")
+            self.canvas.create_rectangle(obs, fill=OBSTACLE_COLOR, outline="black")
         self.canvas.create_oval(self.hole[0] - HOLE_RADIUS, self.hole[1] - HOLE_RADIUS,
-                                self.hole[0] +
-                                HOLE_RADIUS, self.hole[1] + HOLE_RADIUS,
-                                fill="black")
+                                 self.hole[0] + HOLE_RADIUS, self.hole[1] + HOLE_RADIUS,
+                                 fill=HOLE_COLOR, outline="black")
 
 
 class Game:
     def __init__(self, root):
         self.root = root
-        self.canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT, bg="green")
+        self.canvas = tk.Canvas(root, width=WIDTH, height=HEIGHT)
         self.canvas.pack()
         self.level_number = 1
         self.attempts = MAX_ATTEMPTS
         self.game_over = False
         self.game_won = False
         self.angle = 0
-        self.power = 0
+        self.power = 50
         self.club_weight_index = 0
         self.setup_ui()
         self.load_level()
         self.update()
 
     def setup_ui(self):
-        self.angle_slider = tk.Scale(self.root, from_=0, to=360, orient="horizontal", label="Angle",
+        self.angle_slider = tk.Scale(self.root, from_=0, to=360, orient="horizontal", label="Ângulo",
                                      command=lambda v: self.set_angle(float(v)))
         self.angle_slider.pack()
-        self.power_slider = tk.Scale(self.root, from_=0, to=100, orient="horizontal", label="Power",
+        self.power_slider = tk.Scale(self.root, from_=0, to=100, orient="horizontal", label="Potência",
                                      command=lambda v: self.set_power(float(v)))
+        self.power_slider.set(self.power)
         self.power_slider.pack()
-        self.club_slider = tk.Scale(self.root, from_=0, to=2, orient="horizontal", label="Club Weight",
+        self.club_slider = tk.Scale(self.root, from_=0, to=2, orient="horizontal", label="Peso do Taco",
+                                    showvalue=True, tickinterval=1,
                                     command=lambda v: self.set_club(int(v)))
         self.club_slider.pack()
-        self.hit_button = tk.Button(self.root, text="Hit", command=self.hit)
+        self.hit_button = tk.Button(self.root, text="Golpear", command=self.hit)
         self.hit_button.pack()
         self.attempts_label = tk.Label(
-            self.root, text=f"Attempts: {self.attempts}/{MAX_ATTEMPTS}")
+            self.root, text=f"Tentativas: {self.attempts}/{MAX_ATTEMPTS}")
         self.attempts_label.pack()
 
     def load_level(self):
@@ -160,7 +158,7 @@ class Game:
     def hit(self):
         if not self.ball.moving and self.attempts > 0 and not self.game_over and not self.game_won:
             self.ball.hit(self.angle, self.power,
-                          CLUB_WEIGHTS[self.club_weight_index])
+                            CLUB_WEIGHTS[self.club_weight_index])
             self.attempts -= 1
             self.update_attempts_label()
 
@@ -172,7 +170,7 @@ class Game:
                     self.level.obstacles, hole_center)
                 if ball_in_hole:
                     self.game_won = True
-                    self.show_end_screen("YOU WIN!")
+                    self.show_end_screen("VOCÊ VENCEU!")
             self.redraw()
             self.check_game_over_condition()
         self.root.after(16, self.update)
@@ -181,8 +179,8 @@ class Game:
         self.level.draw()
         if self.ball.visible:
             self.canvas.create_oval(self.ball.x - BALL_RADIUS, self.ball.y - BALL_RADIUS,
-                                    self.ball.x + BALL_RADIUS, self.ball.y + BALL_RADIUS,
-                                    fill="white")
+                                     self.ball.x + BALL_RADIUS, self.ball.y + BALL_RADIUS,
+                                     fill=BALL_COLOR, outline="black")
 
         if not self.ball.moving and self.ball.visible:
             club_length = 30 + self.power * 0.5
@@ -195,26 +193,26 @@ class Game:
     def check_game_over_condition(self):
         if self.attempts == 0 and not self.ball.moving and not self.game_won and not self.game_over:
             self.game_over = True
-            self.show_end_screen("GAME OVER")
+            self.show_end_screen("FIM DE JOGO")
 
     def show_end_screen(self, message):
         end_screen = tk.Toplevel(self.root)
-        end_screen.title("Game Over")
+        end_screen.title("Fim do Jogo")
 
         label = tk.Label(end_screen, text=message, font=("Arial", 32))
         label.pack(pady=20)
 
         retry_button = tk.Button(
-            end_screen, text="Retry", command=self.restart_level)
+            end_screen, text="Tentar Novamente", command=self.restart_level)
         retry_button.pack(pady=10)
 
-        quit_button = tk.Button(end_screen, text="Quit",
-                                command=self.root.destroy)
+        quit_button = tk.Button(end_screen, text="Sair",
+                                 command=self.root.destroy)
         quit_button.pack(pady=10)
 
-        if message == "YOU WIN!":
+        if message == "VOCÊ VENCEU!":
             next_level_button = tk.Button(
-                end_screen, text="Next Level", command=self.next_level)
+                end_screen, text="Próximo Nível", command=self.next_level)
             next_level_button.pack(pady=10)
 
     def restart_level(self):
@@ -229,7 +227,7 @@ class Game:
 
     def update_attempts_label(self):
         self.attempts_label.config(
-            text=f"Attempts: {self.attempts}/{MAX_ATTEMPTS}")
+            text=f"Tentativas: {self.attempts}/{MAX_ATTEMPTS}")
 
 
 if __name__ == "__main__":
