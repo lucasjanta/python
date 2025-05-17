@@ -9,8 +9,8 @@ CLUB_COLORS = ["#FFD700", "#A9A9A9", "#8B0000"]
 FRICTION = 0.98
 SPEED_THRESHOLD = 0.5
 MAX_ATTEMPTS = 3
-HOLE_RADIUS = BALL_RADIUS + 5  # Aumentei um pouco o raio para facilitar a "atração"
-ATTRACTION_RADIUS = 50  # Raio dentro do qual a bola começa a ser atraída
+HOLE_RADIUS = BALL_RADIUS + 5
+ATTRACTION_RADIUS = 50
 ATTRACTION_FORCE = 0.1
 
 
@@ -31,10 +31,8 @@ class Ball:
             distance_to_hole = math.hypot(
                 self.x - hole_center[0], self.y - hole_center[1])
             if distance_to_hole < ATTRACTION_RADIUS:
-                # Calcular a direção para o buraco
                 angle_to_hole = math.atan2(
                     hole_center[1] - self.y, hole_center[0] - self.x)
-                # Aplicar uma pequena força na direção do buraco
                 self.vx += ATTRACTION_FORCE * math.cos(angle_to_hole)
                 self.vy += ATTRACTION_FORCE * math.sin(angle_to_hole)
 
@@ -62,7 +60,7 @@ class Ball:
                 self.moving = False
             elif distance_to_hole <= HOLE_RADIUS:
                 self.visible = False
-                return True  # Sinaliza que a bola entrou no buraco
+                return True
         return False
 
     def hit(self, angle_deg, power, club_weight):
