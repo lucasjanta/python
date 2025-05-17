@@ -1,5 +1,6 @@
 import tkinter as tk
 import math
+import random
 
 # Constantes
 WIDTH, HEIGHT = 800, 600
@@ -44,14 +45,14 @@ class Ball:
             for obstacle in obstacles:
                 ox1, oy1, ox2, oy2 = obstacle
                 if ox1 <= self.x <= ox2 and oy1 <= self.y <= oy2:
-                    self.vx *= -1
-                    self.vy *= -1
+                    self.vx *= -0.8  # Adicionando perda de energia na colisão (80% da velocidade retida)
+                    self.vy *= -0.8
 
             if self.x - BALL_RADIUS < 0 or self.x + BALL_RADIUS > WIDTH:
-                self.vx *= -1
+                self.vx *= -0.8
                 self.x = max(BALL_RADIUS, min(WIDTH - BALL_RADIUS, self.x))
             if self.y - BALL_RADIUS < 0 or self.y + BALL_RADIUS > HEIGHT:
-                self.vy *= -1
+                self.vy *= -0.8
                 self.y = max(BALL_RADIUS, min(HEIGHT - BALL_RADIUS, self.y))
 
             if abs(self.vx) < SPEED_THRESHOLD and abs(self.vy) < SPEED_THRESHOLD and distance_to_hole > HOLE_RADIUS:
@@ -65,8 +66,15 @@ class Ball:
 
     def hit(self, angle_deg, power, club_weight):
         angle_rad = math.radians(angle_deg)
-        self.vx = power * math.cos(angle_rad) / club_weight
-        self.vy = -power * math.sin(angle_rad) / club_weight
+        # Introduzindo uma pequena não-linearidade na relação potência-velocidade
+        velocity_multiplier = power / 100.0
+        if velocity_multiplier < 0.2:
+            velocity_multiplier *= 0.5
+        elif velocity_multiplier < 0.5:
+            velocity_multiplier *= 0.8
+
+        self.vx = 100 * velocity_multiplier * math.cos(angle_rad) / club_weight # Multiplicador base para a velocidade
+        self.vy = -100 * velocity_multiplier * math.sin(angle_rad) / club_weight
         self.moving = True
 
 
